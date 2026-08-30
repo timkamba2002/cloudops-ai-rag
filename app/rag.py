@@ -4,6 +4,9 @@ REGION = "us-east-1"
 KNOWLEDGE_BASE_ID = "UCTIVBUB1H"
 MODEL_ID = "amazon.nova-lite-v1:0"
 
+MIN_RELEVANCE_SCORE = 0.40
+
+
 # Client used for Knowledge Base retrieval
 kb_client = boto3.client(
     "bedrock-agent-runtime",
@@ -47,10 +50,14 @@ sources = []
 
 for index, result in enumerate(retrieval_results, start=1):
     text = result["content"]["text"]
+    score = result.get("score", 0)
+
+    # Ignore results that aren't relevant enough
+    if score < MIN_RELEVANCE_SCORE:
+        continue
 
     metadata = result.get("metadata", {})
     title = metadata.get("_document_title", "Unknown source")
-    score = result.get("score", 0)
 
     context_parts.append(
         f"[Source {index}: {title}]\n{text}"
@@ -61,6 +68,12 @@ for index, result in enumerate(retrieval_results, start=1):
         "title": title,
         "score": score
     })
+
+# If everything was filtered out, don't ask the LLM to guess
+if not context_parts:
+    print("\nCloudOps AI:\n")
+    print("I do not have enough relevant information in the knowledge base to answer that question.")
+    exit()
 
 context = "\n\n".join(context_parts)
 
